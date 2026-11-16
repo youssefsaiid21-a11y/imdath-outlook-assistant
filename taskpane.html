@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sphinx — AI Email Assistant</title>
+
+  <!-- Office.js — must load first -->
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+
+  <!-- Add-in config (clientId, tenantId) -->
+  <script src="config.js?v=3"></script>
+
+  <link rel="stylesheet" href="taskpane.css?v=21" />
+</head>
+<body>
+<div id="app">
+
+  <!-- ── Header ── -->
+  <header class="pane-header">
+    <div class="header-brand">
+      <img src="/assets/portfolio-logo.svg" class="invigilo-logo" alt="Example" />
+      <div class="header-titles">
+        <h1>Sphinx</h1>
+        <span class="tagline">by Example</span>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="size-toggle" id="size-toggle-btn" onclick="togglePaneSize()" title="Switch between compact and comfortable layout density" aria-label="Toggle layout density">
+        <span id="size-icon-shrink" style="font-size:11px;font-weight:700;line-height:1">A<span style="font-size:8px">a</span></span>
+        <span id="size-icon-expand" style="display:none;font-size:11px;font-weight:700;line-height:1">A<span style="font-size:11px">A</span></span>
+      </button>
+      <button id="auth-btn" onclick="handleAuthBtn()">Sign in</button>
+    </div>
+  </header>
+
+  <!-- ── Body ── -->
+  <div class="pane-body">
+
+    <!-- Auth prompt (shown when not signed in) -->
+    <div id="auth-banner">
+      <div class="auth-value-prop">
+        <div class="auth-logo-wrap">
+          <img src="/assets/portfolio-logo.svg" class="auth-logo" alt="Sphinx" />
+        </div>
+        <h2 class="auth-headline">Write better emails, faster.</h2>
+        <ul class="auth-bullets">
+          <li>Drafts emails in your voice, not generic AI</li>
+          <li>Loads your HubSpot deals, notes and history</li>
+          <li>Refine with a message, send from right here</li>
+        </ul>
+        <p id="auth-banner-subtitle" class="auth-subtitle">Sign in with your Microsoft account to get started.</p>
+        <button id="sign-in-btn" onclick="handleAuthBtn()">Sign in with Microsoft</button>
+      </div>
+    </div>
+
+    <!-- Main content (hidden until signed in) -->
+    <div id="main-content" style="display:none">
+
+      <!-- ── Tab Bar ── -->
+      <div class="tab-bar" role="tablist">
+        <button class="tab-btn active" id="tab-btn-compose"   onclick="switchTab('compose')"   role="tab" aria-selected="true"  aria-controls="tab-compose">Compose</button>
+        <button class="tab-btn"        id="tab-btn-followups" onclick="switchTab('followups')" role="tab" aria-selected="false" aria-controls="tab-followups">Follow-ups</button>
+      </div>
+
+      <!-- ══ COMPOSE TAB ══ -->
+      <div id="tab-compose" role="tabpanel" aria-labelledby="tab-btn-compose">
+
+      <!-- ── Context Card ── -->
+      <div class="section" id="context-section">
+        <div class="context-header" id="context-toggle" onclick="toggleContext()" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleContext();}">
+          <div class="context-header-left">
+            <div class="context-dot" id="context-dot"></div>
+            <div>
+              <div class="context-title" id="context-title">Loading context...</div>
+              <div class="context-subtitle" id="context-subtitle"></div>
+            </div>
+          </div>
+          <span class="context-chevron" id="context-chevron">▼</span>
+        </div>
+        <div class="context-body" id="context-body">
+          <!-- Skeleton loading state -->
+          <div id="context-skeleton">
+            <div class="skeleton skeleton-line medium"></div>
+            <div class="skeleton skeleton-line short"></div>
+            <div class="skeleton skeleton-line full"></div>
+            <div class="skeleton skeleton-line medium"></div>
+          </div>
+          <!-- Loaded context -->
+          <div id="context-loaded" style="display:none">
+            <div class="context-row">
+              <span class="context-label">Name</span>
+              <span class="context-value" id="ctx-name">—</span>
+            </div>
+            <div class="context-row">
+              <span class="context-label">Company</span>
+              <span class="context-value" id="ctx-company">—</span>
+            </div>
+            <div class="context-row">
+              <span class="context-label">Title</span>
+              <span class="context-value" id="ctx-title">—</span>
+            </div>
+            <div class="context-row">
+              <span class="context-label">Deal stage</span>
+              <span class="context-value" id="ctx-stage">—</span>
+            </div>
+            <div id="move-stage-row" class="context-row move-stage-row" style="display:none">
+              <span class="context-label">New stage</span>
+              <span class="context-value">
+                <select id="move-stage-select" aria-label="Move deal to stage">
+                  <option value="">Loading stages…</option>
+                </select>
+                <button class="btn-link" id="move-stage-confirm" onclick="confirmMoveStage()">Move</button>
+                <button class="btn-link" onclick="hideMoveStagePanel()">Cancel</button>
+              </span>
+            </div>
+            <div class="context-row">
+              <span class="context-label">Deal value</span>
+              <span class="context-value" id="ctx-deal">—</span>
+            </div>
+            <div class="context-row">
+              <span class="context-label">Last email</span>
+              <span class="context-value" id="ctx-last-email">—</span>
+            </div>
+            <div id="ctx-hs-status-row" class="context-row" style="display:none">
+              <span class="context-label">HubSpot</span>
+              <span class="context-value" id="ctx-hs-status">—</span>
+            </div>
+            <div id="ctx-note-row" style="display:none">
+              <div class="crm-note" id="ctx-note"></div>
+            </div>
+            <div class="context-actions">
+              <button class="btn-link" onclick="refreshContext()">Refresh</button>
+              <span id="hubspot-link-wrap" style="display:none">
+                <button class="btn-link" id="hubspot-create-link" onclick="openHubSpotLink()">View in HubSpot</button>
+              </span>
+              <button class="btn-link" id="create-deal-link" onclick="showDealPanel()">+ New Deal</button>
+            </div>
+            <div id="auto-track-row" class="context-row" style="display:none">
+              <span class="context-label">Auto-track</span>
+              <span class="context-value">
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+                  <input type="checkbox" id="auto-track-checkbox" onchange="toggleAutoTrack(this.checked)" />
+                  Link emails automatically
+                </label>
+              </span>
+            </div>
+          </div>
+          <!-- Error state -->
+          <div id="context-error" style="display:none" class="empty-state">
+            <span class="icon">⚠️</span>
+            <span id="context-error-msg">Could not load context.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Read Mode Banner — shown when taskpane opens on a read email ── -->
+      <div id="read-mode-banner" class="read-mode-banner" style="display:none">
+        <div class="read-mode-content">
+          <p class="read-mode-text">You're viewing an email. Start a reply to compose with Sphinx.</p>
+          <button class="btn btn-primary full-width" id="reply-all-btn" onclick="triggerReplyAll()" aria-label="Reply All">
+            &#8617; Reply All
+          </button>
+          <button class="btn btn-secondary full-width" style="margin-top:6px" onclick="triggerReply()" aria-label="Reply">
+            &#8617; Reply
+          </button>
+        </div>
+      </div>
+
+      <!-- ── Compose Panel ── -->
+      <div class="section">
+        <div class="section-title">Compose</div>
+        <div class="compose-body">
+
+          <!-- Reply Mode Banner -->
+          <div id="reply-mode-banner" class="reply-mode-banner" style="display:none">
+            <div class="reply-mode-header">
+              <span class="reply-mode-icon">&#8617;</span>
+              <span class="reply-mode-label">Reply Mode</span>
+              <button class="reply-mode-dismiss" onclick="dismissReplyMode()" title="Switch to compose" aria-label="Dismiss reply mode">&times;</button>
+            </div>
+            <div class="reply-mode-context">
+              <span class="reply-mode-subject" id="reply-thread-subject"></span>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label class="field-label" for="recipient-input">To</label>
+            <div class="recipient-wrap">
+              <input type="text" id="recipient-input" class="recipient-input"
+                placeholder="Detecting or type to search..."
+                autocomplete="off" spellcheck="false"
+                oninput="onRecipientInput(this)"
+                onkeydown="onRecipientKeydown(event)"
+                onblur="scheduleHideDropdown()" />
+              <div id="recipient-dropdown" class="recipient-dropdown" style="display:none" role="listbox"></div>
+            </div>
+            <!-- Multi-recipient chips -->
+            <div id="multi-recipient-chips" class="recipient-chips" style="display:none"></div>
+          </div>
+
+          <div class="field-group">
+            <label class="field-label" for="custom-notes">
+              What's the goal of this email?
+              <button class="btn-link suggest-response-btn" id="suggest-response-btn" type="button" onclick="suggestResponse()" title="AI suggests a response based on the thread" aria-label="AI suggests a response based on the email thread">Suggest</button>
+            </label>
+            <div class="voice-wrap">
+              <textarea id="custom-notes" rows="4"
+                placeholder="e.g. Follow up on the proposal, push for a meeting next week"
+                aria-label="What's the goal of this email?"></textarea>
+              <button class="mic-btn" id="mic-btn" onclick="toggleVoice()" title="Speak your goal" type="button">
+                <svg id="mic-icon" viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.93V20H9v2h6v-2h-2v-2.07A7 7 0 0 0 19 11h-2z"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label class="field-label">Tone</label>
+            <div class="tone-pills">
+              <button class="tone-pill selected" data-tone="Professional" onclick="selectTone(this)">Professional</button>
+              <button class="tone-pill" data-tone="Friendly" onclick="selectTone(this)">Friendly</button>
+              <button class="tone-pill" data-tone="Formal" onclick="selectTone(this)">Formal</button>
+              <button class="tone-pill" data-tone="Concise" onclick="selectTone(this)">Concise</button>
+              <button class="tone-pill" data-tone="Persuasive" onclick="selectTone(this)">Persuasive</button>
+            </div>
+          </div>
+
+          <button class="btn btn-primary" id="generate-btn" onclick="generateEmail()">
+            Generate Email
+          </button>
+        </div>
+      </div>
+
+      <!-- ── HubSpot Actions ── -->
+      <div id="hubspot-actions" class="hubspot-actions">
+        <div class="hubspot-actions-row">
+          <button class="btn btn-secondary" onclick="showDealPanel()">+ Deal</button>
+          <button class="btn btn-secondary" onclick="showLinkDealPanel()">Link Deal</button>
+          <button class="btn btn-secondary" onclick="showContactPanel()">+ Contact</button>
+        </div>
+      </div>
+
+      <!-- ── Preview & Edit ── -->
+      <div class="section" id="preview-section">
+        <div class="section-title">Preview &amp; Edit</div>
+        <div class="preview-body">
+          <div class="field-group">
+            <label class="field-label">Subject</label>
+            <input type="text" id="subject-input" placeholder="Subject line" />
+          </div>
+          <div class="field-group">
+            <label class="field-label">Body</label>
+            <textarea id="body-textarea" rows="8"></textarea>
+          </div>
+
+          <!-- Feedback row -->
+          <div id="feedback-row" class="feedback-row" style="display:none">
+            <span class="feedback-label">Was this useful?</span>
+            <button class="feedback-btn" id="feedback-up"   onclick="submitFeedback(true)"  title="Good output" aria-label="Thumbs up">👍</button>
+            <button class="feedback-btn" id="feedback-down" onclick="submitFeedback(false)" title="Needs work"  aria-label="Thumbs down">👎</button>
+          </div>
+
+          <div class="action-group">
+            <div class="action-option">
+              <button class="btn btn-primary full-width" onclick="insertIntoOutlook()">Insert into Outlook</button>
+              <p class="action-caption">Puts the draft in your compose window — you review before sending.</p>
+            </div>
+          </div>
+
+          <div class="btn-row" style="margin-top:8px; display:flex; gap:8px">
+            <button class="btn btn-secondary" id="hubspot-log-btn" onclick="logToHubSpot()">
+              Log to HubSpot
+            </button>
+            <button class="btn btn-secondary" onclick="copyToClipboard()">
+              Copy
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Create Deal Panel ── -->
+      <div class="section" id="deal-section" role="region" aria-label="Create HubSpot Deal" style="display:none">
+        <div class="section-title">Create HubSpot Deal</div>
+        <div class="deal-body">
+          <div class="field-group">
+            <label class="field-label" for="deal-name-input">Deal Name</label>
+            <div class="deal-name-row">
+              <input type="text" id="deal-name-input" placeholder="e.g. Acme Corp — Pilot" />
+              <button class="btn-icon" id="suggest-deal-btn" onclick="suggestDealName()" title="AI suggest" aria-label="AI suggest deal name">&#9733;</button>
+            </div>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="deal-pipeline-select">Pipeline</label>
+            <select id="deal-pipeline-select" onchange="onPipelineChange()">
+              <option value="">Loading...</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="deal-stage-select">Stage</label>
+            <select id="deal-stage-select">
+              <option value="">Select pipeline first</option>
+            </select>
+          </div>
+          <!-- Dynamic properties loaded from HubSpot -->
+          <div id="deal-dynamic-fields">
+            <div class="deal-fields-loading" style="text-align:center; padding:12px; color:var(--color-text-muted); font-size:11px">Loading properties...</div>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="deal-notes">Notes (optional)</label>
+            <textarea id="deal-notes" rows="2" placeholder="Any context for this deal..."></textarea>
+          </div>
+          <button class="btn btn-primary" id="create-deal-btn" onclick="createDeal()">Create Deal</button>
+        </div>
+      </div>
+
+      <!-- ── Link to Existing Deal Panel ── -->
+      <div class="section" id="link-deal-section" role="region" aria-label="Link to Existing Deal" style="display:none">
+        <div class="section-title">Link to Existing Deal <button class="btn-link" onclick="hideLinkDealPanel()" style="margin-left:auto">Cancel</button></div>
+        <div class="deal-body">
+          <div class="field-group">
+            <label class="field-label" for="deal-search-input">Search deals</label>
+            <input type="text" id="deal-search-input" placeholder="Type to search deals..."
+              oninput="onDealSearchInput(this)" autocomplete="off" />
+          </div>
+          <div id="deal-search-results" class="deal-search-results"></div>
+        </div>
+      </div>
+
+      <!-- ── Create Contact Panel ── -->
+      <div class="section" id="contact-section" role="region" aria-label="Create HubSpot Contact" style="display:none">
+        <div class="section-title">Create HubSpot Contact <button class="btn-link" onclick="hideContactPanel()" style="margin-left:auto">Cancel</button></div>
+        <div class="deal-body">
+          <div class="deal-row-2col">
+            <div class="field-group">
+              <label class="field-label" for="contact-firstname">First Name</label>
+              <input type="text" id="contact-firstname" placeholder="First name" />
+            </div>
+            <div class="field-group">
+              <label class="field-label" for="contact-lastname">Last Name</label>
+              <input type="text" id="contact-lastname" placeholder="Last name" />
+            </div>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="contact-email">Email</label>
+            <input type="email" id="contact-email" placeholder="email@company.com" />
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="contact-jobtitle">Job Title</label>
+            <input type="text" id="contact-jobtitle" placeholder="e.g. VP Sales" />
+          </div>
+          <div class="field-group">
+            <label class="field-label">Company
+              <button class="btn-link" onclick="showCreateCompanyPanel()" style="margin-left:4px">+ New</button>
+            </label>
+            <input type="text" id="contact-company-search" placeholder="Search companies..."
+              oninput="onCompanySearchInput(this)" autocomplete="off" />
+            <div id="company-search-results" class="deal-search-results"></div>
+            <input type="hidden" id="contact-company-id" />
+            <div id="selected-company" class="selected-company-badge" style="display:none"></div>
+          </div>
+          <button class="btn btn-primary" id="create-contact-btn" onclick="createContact()">Create Contact</button>
+        </div>
+      </div>
+
+      <!-- ── Create Company Panel ── -->
+      <div class="section" id="company-section" role="region" aria-label="Create HubSpot Company" style="display:none">
+        <div class="section-title">Create HubSpot Company <button class="btn-link" onclick="hideCompanyPanel()" style="margin-left:auto">Cancel</button></div>
+        <div class="deal-body">
+          <div class="field-group">
+            <label class="field-label" for="company-name">Company Name</label>
+            <input type="text" id="company-name" placeholder="e.g. Acme Corp" />
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="company-domain">Domain</label>
+            <input type="text" id="company-domain" placeholder="e.g. acme.com" />
+          </div>
+          <button class="btn btn-primary" id="create-company-btn" onclick="createCompany()">Create Company</button>
+        </div>
+      </div>
+
+      <!-- ── Refinement Chat ── -->
+      <div class="section" id="chat-section">
+        <div class="section-title">Refine</div>
+        <div class="chat-history" id="chat-history" role="log" aria-live="polite" aria-label="Refinement chat history"></div>
+        <div class="chat-input-row">
+          <input type="text" id="chat-input" placeholder="Make it shorter, add urgency..." onkeydown="handleChatKey(event)" />
+          <button class="mic-btn" id="chat-mic-btn" onclick="toggleVoiceForChat()" title="Speak a refinement instruction" type="button" style="position:static;flex-shrink:0;">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.93V20H9v2h6v-2h-2v-2.07A7 7 0 0 0 19 11h-2z"/></svg>
+          </button>
+          <button class="chat-send-btn" id="chat-send-btn" onclick="sendChatMessage()">Apply</button>
+        </div>
+      </div>
+
+      </div><!-- /tab-compose -->
+
+      <!-- ══ FOLLOW-UPS TAB ══ -->
+      <div id="tab-followups" role="tabpanel" aria-labelledby="tab-btn-followups" style="display:none">
+
+        <!-- Summary Cards -->
+        <div class="analytics-cards">
+          <div class="analytics-card">
+            <div class="analytics-value" id="stat-total-deals">—</div>
+            <div class="analytics-label">Deals</div>
+          </div>
+          <div class="analytics-card">
+            <div class="analytics-value urgent" id="stat-overdue">—</div>
+            <div class="analytics-label">Overdue</div>
+          </div>
+          <div class="analytics-card">
+            <div class="analytics-value" id="stat-stalest">—</div>
+            <div class="analytics-label">Stalest</div>
+          </div>
+        </div>
+
+        <!-- Follow-up Deal List -->
+        <div class="section">
+          <div class="section-title">Deals Needing Follow-up</div>
+          <div id="followup-list">
+            <div class="analytics-skeleton">
+              <div class="skeleton skeleton-line full"></div>
+              <div class="skeleton skeleton-line medium"></div>
+              <div class="skeleton skeleton-line full"></div>
+              <div class="skeleton skeleton-line medium"></div>
+              <div class="skeleton skeleton-line full"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Follow-up Draft Panel (hidden until user clicks Follow up) -->
+        <div class="section" id="followup-draft-section" style="display:none">
+          <div class="section-title">Follow-up Draft <button class="btn-link" onclick="hideFollowupDraft()" style="margin-left:auto">Close</button></div>
+          <div class="deal-body">
+            <div id="followup-reply-info" class="followup-reply-info" style="display:none"></div>
+            <div class="field-group">
+              <label class="field-label">Subject</label>
+              <input type="text" id="followup-subject" placeholder="Subject line" />
+            </div>
+            <div class="field-group">
+              <label class="field-label">Body</label>
+              <textarea id="followup-body" rows="6"></textarea>
+            </div>
+            <div class="followup-iterate-bar" id="followup-iterate-bar">
+              <button class="followup-chip" onclick="refineFollowupDraft('Regenerate this follow-up with a different approach')">Regenerate</button>
+              <button class="followup-chip" onclick="refineFollowupDraft('Make this shorter and more concise')">Shorter</button>
+              <button class="followup-chip" onclick="refineFollowupDraft('Make this longer with more detail')">Longer</button>
+              <button class="followup-chip" onclick="refineFollowupDraft('Make this more formal and professional')">More Formal</button>
+              <button class="followup-chip" onclick="refineFollowupDraft('Make this more casual and friendly')">More Casual</button>
+              <div class="followup-custom-refine">
+                <input type="text" id="followup-custom-instruction" placeholder="Custom instruction..." />
+                <button class="followup-chip followup-chip-send" onclick="refineFollowupDraft(document.getElementById('followup-custom-instruction').value)">Go</button>
+              </div>
+            </div>
+            <button class="btn btn-primary" id="followup-insert-btn" onclick="insertFollowupIntoOutlook()">
+              Draft in Thread
+            </button>
+            <p class="action-caption" style="margin-top:4px">Creates a reply-all draft in the thread. Find it in your Drafts folder.</p>
+          </div>
+        </div>
+
+        <button class="btn btn-secondary" id="followup-refresh-btn" onclick="loadFollowups()" style="width:100%;margin-top:4px">
+          Refresh
+        </button>
+
+      </div><!-- /tab-followups -->
+
+    </div><!-- /main-content -->
+
+  </div><!-- /pane-body -->
+
+  <!-- ── Footer ── -->
+  <footer class="pane-footer">
+    <img src="/assets/portfolio-logo.svg" class="invigilo-logo-footer" alt="" />
+    Powered by Example AI
+  </footer>
+
+</div><!-- /app -->
+
+<!-- Toast notification -->
+<div id="status-toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+<!-- Sphinx modules — load order matters (dependencies must come first) -->
+<script src="utils.js?v=46"></script>
+<script src="auth.js?v=46"></script>
+<script src="recipient.js?v=46"></script>
+<script src="context.js?v=46"></script>
+<script src="compose.js?v=46"></script>
+<script src="crm.js?v=46"></script>
+<script src="followups.js?v=46"></script>
+<script src="imdath-init.js?v=46"></script>
+</body>
+</html>

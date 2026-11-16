@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <script src="/lib/msal-browser.min.js"></script>
+  <script src="/config.js"></script>
+</head>
+<body>
+  <script>
+    (async function () {
+      const instance = new msal.PublicClientApplication({
+        auth: {
+          clientId: msalConfig.auth.clientId,
+          authority: msalConfig.auth.authority,
+          redirectUri: window.location.origin + "/auth-redirect.html"
+        },
+        cache: {
+          cacheLocation: "localStorage",
+          storeAuthStateInCookie: true
+        }
+      });
+      await instance.initialize();
+      await instance.handleRedirectPromise();
+    })();
+  </script>
+</body>
+</html>

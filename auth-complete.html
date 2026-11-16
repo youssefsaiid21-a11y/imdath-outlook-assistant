@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Signing in...</title>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <script src="/config.js"></script>
+  <style>
+    body { font-family: 'Segoe UI', sans-serif; display: flex; align-items: center;
+           justify-content: center; height: 100vh; margin: 0; background: #f3f2f1; }
+    p { color: #323130; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <p id="status">Completing sign-in...</p>
+  <script>
+    Office.onReady(async function () {
+      const params = new URLSearchParams(window.location.search);
+      const code   = params.get('code');
+      const state  = params.get('state');
+      const error  = params.get('error');
+
+      function fail(msg) {
+        document.getElementById('status').textContent = 'Sign-in failed.';
+        Office.context.ui.messageParent(JSON.stringify({ status: 'error', message: msg }));
+      }
+
+      if (error) { fail(params.get('error_description') || error); return; }
+      if (!code)  { fail('No auth code received'); return; }
+
+      // Extract verifier from state (format: "randomId|verifier")
+      const verifier = state ? state.split('|').slice(1).join('|') : '';
+      if (!verifier) { fail('Missing PKCE verifier'); return; }
+
+      // Send code + verifier to the taskpane. The SERVER does the token exchange
+      // using the client secret (confidential client / Web platform). This gives
+      // the server a refresh token it can use indefinitely from any IP.
+      document.getElementById('status').textContent = 'Signed in!';
+      Office.context.ui.messageParent(JSON.stringify({
+        status:   'code',
+        code:     code,
+        verifier: verifier
+      }));
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Voice Input</title>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: #f3f2f1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      gap: 20px;
+      padding: 24px;
+    }
+    .mic-btn {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      border: none;
+      background: #0099FF;
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+      box-shadow: 0 4px 12px rgba(0,153,255,0.35);
+    }
+    .mic-btn:hover { background: #0077CC; }
+    .mic-btn:focus-visible { outline: 3px solid #0099FF; outline-offset: 3px; }
+    .mic-btn:disabled { background: #a19f9d; cursor: not-allowed; box-shadow: none; }
+    .mic-btn.listening {
+      background: #dc2626;
+      box-shadow: none;
+      animation: pulse 1s ease-in-out infinite;
+    }
+    .mic-btn svg { width: 32px; height: 32px; fill: currentColor; }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); }
+      50%       { box-shadow: 0 0 0 16px rgba(220, 38, 38, 0); }
+    }
+    #status {
+      font-size: 14px;
+      color: #605e5c;
+      text-align: center;
+      min-height: 20px;
+    }
+    #transcript {
+      font-size: 13px;
+      color: #201f1e;
+      text-align: center;
+      max-width: 280px;
+      line-height: 1.5;
+      min-height: 40px;
+    }
+    .done-btn {
+      background: #0099FF;
+      color: #fff;
+      border: none;
+      border-radius: 20px;
+      padding: 9px 28px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: none;
+      box-shadow: 0 2px 8px rgba(0,153,255,0.3);
+    }
+    .done-btn:hover { background: #0077CC; }
+    .done-btn:focus-visible { outline: 2px solid #0099FF; outline-offset: 2px; }
+  </style>
+</head>
+<body>
+  <button class="mic-btn" id="mic-btn" onclick="toggleListen()">
+    <svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.93V20H9v2h6v-2h-2v-2.07A7 7 0 0 0 19 11h-2z"/></svg>
+  </button>
+  <p id="status">Tap to speak</p>
+  <div id="transcript"></div>
+  <button class="done-btn" id="done-btn" onclick="sendAndClose()">Use this text</button>
+
+  <script>
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    let recognition = null;
+    let state       = "idle"; // idle | listening
+    let finalText   = "";
+
+    const micBtn     = document.getElementById("mic-btn");
+    const statusEl   = document.getElementById("status");
+    const transcriptEl = document.getElementById("transcript");
+    const doneBtn    = document.getElementById("done-btn");
+
+    if (!SpeechRecognition) {
+      statusEl.textContent = "Speech recognition not supported in this browser.";
+      micBtn.disabled = true;
+    }
+
+    function toggleListen() {
+      if (state === "listening") {
+        recognition.stop();
+        return;
+      }
+
+      finalText = "";
+      transcriptEl.textContent = "";
+      doneBtn.style.display = "none";
+
+      recognition = new SpeechRecognition();
+      recognition.lang = "en-US";
+      recognition.interimResults = true;
+      recognition.continuous = true;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = function () {
+        state = "listening";
+        micBtn.classList.add("listening");
+        statusEl.textContent = "Listening\u2026 tap to stop";
+      };
+
+      recognition.onresult = function (event) {
+        let interim = "";
+        finalText = "";
+        for (let i = 0; i < event.results.length; i++) {
+          if (event.results[i].isFinal) {
+            finalText += event.results[i][0].transcript;
+          } else {
+            interim += event.results[i][0].transcript;
+          }
+        }
+        transcriptEl.textContent = finalText + (interim ? " " + interim : "");
+      };
+
+      recognition.onerror = function (event) {
+        console.error("[voice] recognition error:", event.error);
+        state = "idle";
+        micBtn.classList.remove("listening");
+        if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+          statusEl.textContent = "Microphone blocked. Check browser/Windows permissions.";
+        } else if (event.error === "no-speech") {
+          statusEl.textContent = "Nothing heard. Tap to try again.";
+        } else {
+          statusEl.textContent = "Recognition error. Tap to retry.";
+        }
+      };
+
+      recognition.onend = function () {
+        state = "idle";
+        micBtn.classList.remove("listening");
+        finalText = finalText.trim();
+        if (finalText) {
+          transcriptEl.textContent = finalText;
+          statusEl.textContent = "Done \u2014 review or tap mic to redo";
+          doneBtn.style.display = "inline-block";
+        } else {
+          statusEl.textContent = "Nothing heard. Tap to try again.";
+        }
+      };
+
+      recognition.start();
+    }
+
+    function sendAndClose() {
+      try {
+        Office.context.ui.messageParent(JSON.stringify({
+          type: "voice",
+          text: finalText.trim()
+        }));
+      } catch (e) {
+        window.close();
+      }
+    }
+  </script>
+</body>
+</html>

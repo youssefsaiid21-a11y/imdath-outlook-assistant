@@ -1,0 +1,52 @@
+node_modules/
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store
+Thumbs.db
+.tmp/
+.data/
+
+# Secrets / credentials
+credentials.json
+token.json
+*.key
+*.pem
+id_rsa
+id_ed25519
+
+# Test / coverage output
+coverage/
+test-results/
+
+# Security audit working files
+SECURITY-AUDIT/raw/
+SECURITY-AUDIT/0[1-5]*
+
+# SWAT team orchestration files
+.swat/
+
+# Private agent/editor notes and deployment review material
+.claude/
+.vscode/
+CLAUDE.md
+SECURITY-AUDIT/
+.env
+*.log
+
+# Local state never belongs in a portfolio snapshot
+.env
+.env.local
+.env.production
+node_modules/
+.venv/
+__pycache__/
+.pytest_cache/
+*.db
+*.sqlite
+*.sqlite3
+*.tsbuildinfo
+.DS_Store
+
+!.env.example
